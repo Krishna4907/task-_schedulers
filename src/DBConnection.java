@@ -3,7 +3,7 @@ import java.sql.DriverManager;
 
 public class DBConnection {
 
-    private static final String URL = "jdbc:postgresql://localhost:5432/promanage_new";
+    private static final String URL = "jdbc:postgresql://localhost:5432/promanage_db";
     private static final String USER = "postgres";
     private static final String PASSWORD = "Krishna@4907";
 
