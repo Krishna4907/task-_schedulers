@@ -1,11 +1,8 @@
-import java.util.ArrayList;
-import java.util.Comparator;
 import java.util.List;
-import java.util.PriorityQueue;
 
 public class Scheduler {
 
-    private static final int MAX_DAYS = 5;
+    private static final int MAX_DAYS = 10; // Extended to 2 weeks
 
     public static void generateSchedule(List<Project> projects) {
         List<Project> history = PredictiveService.getHistoryFromDB();
@@ -13,69 +10,109 @@ public class Scheduler {
         // 1. Pre-process: Filter out invalid data
         projects.removeIf(p -> p.deadline <= 0 || p.revenue <= 0);
 
-        // Sort by deadline first (chronological order)
-        // If deadlines are the same, order by highest strategic score first
-        projects.sort(Comparator.comparingInt((Project p) -> p.deadline)
-                .thenComparing(p -> PredictiveService.calculateStrategicValue(p, history), Comparator.reverseOrder()));
+        // 2. Predictive Analysis Sort (Job Sequencing by Value)
+        // We evaluate every project's strategic value, which considers revenue,
+        // deadlines, and history.
+        // Sorting in descending order of value guarantees we attempt to fit the most
+        // valuable items first.
+        projects.sort((p1, p2) -> Double.compare(
+                PredictiveService.calculateStrategicValue(p2, history),
+                PredictiveService.calculateStrategicValue(p1, history)));
 
-        // 2. Priority Queue (Min-Heap based on Strategic Score)
-        // This keeps track of our "Best Projects" selected so far.
-        // It always leaves the "WEAKEST" project at the front.
-        PriorityQueue<Project> selectionHeap = new PriorityQueue<>(
-                Comparator.comparingDouble(p -> PredictiveService.calculateStrategicValue(p, history)));
+        // 3. Allocation via Backwards Slotting to strictly enforce deadlines
+        // Array of slots 1 to 10 (MAX_DAYS). Index 0 is unused.
+        Project[] scheduledSlots = new Project[MAX_DAYS + 1];
 
         for (Project p : projects) {
-            double pScore = PredictiveService.calculateStrategicValue(p, history);
-            int effectiveDeadline = Math.min(p.deadline, MAX_DAYS);
+            int maxSlot = Math.min(p.deadline, MAX_DAYS);
 
-            if (selectionHeap.size() < effectiveDeadline) {
-                // If we still have an open slot before this project's deadline, safely add it.
-                selectionHeap.add(p);
-            } else if (!selectionHeap.isEmpty()) {
-                // If slots are full up to this deadline, check our weakest selected project
-                Project weakest = selectionHeap.peek();
-                double weakestScore = PredictiveService.calculateStrategicValue(weakest, history);
-
-                // If this new project is strategically better than the weakest one we saved...
-                if (pScore > weakestScore) {
-                    // Kick out the weaker project and keep this better one!
-                    selectionHeap.poll();
-                    selectionHeap.add(p);
+            // Search backwards from its deadline down to day 1 to find the latest available
+            // slot.
+            // This optimally reserves earlier slots for projects with tighter deadlines!
+            for (int j = maxSlot; j >= 1; j--) {
+                if (scheduledSlots[j] == null) {
+                    scheduledSlots[j] = p; // Lock the project into this slot
+                    break;
                 }
             }
         }
 
-        // 3. Finalize: Extract best 5 and print
-        List<Project> finalProjects = new ArrayList<>(selectionHeap);
-        printSchedule(finalProjects, history);
+        // 4. Finalize and Output
+        printSchedule(scheduledSlots, history);
     }
 
-    private static void printSchedule(List<Project> selectedProjects, List<Project> history) {
-        // Sort final selection by deadline so they print nicely from Monday to Friday
-        selectedProjects.sort(Comparator.comparingInt(p -> p.deadline));
-
+    private static void printSchedule(Project[] scheduledSlots, List<Project> history) {
         String[] days = { "Monday", "Tuesday", "Wednesday", "Thursday", "Friday" };
-        int totalRevenue = 0;
+        int week1Revenue = 0;
+        int week2ProjectsCount = 0;
 
-        System.out.println("\n [OPTIMAL HEAP] PREDICTIVE WEEKLY SCHEDULE");
-        System.out.println("-------------------------------------------");
+        System.out.println("\n [OPTIMAL PREDICTIVE ALGORITHM] 2-WEEK SCHEDULE");
+        System.out.println("--------------------------------------------------");
 
-        for (int i = 0; i < MAX_DAYS; i++) {
-            if (i < selectedProjects.size()) {
-                Project p = selectedProjects.get(i);
-                double sv = PredictiveService.calculateStrategicValue(p, history);
-                String tag = (p.deadline > MAX_DAYS) ? " [Deferred Potential]" : " [Urgent]";
+        System.out.println("\n === WEEK 1 (This Week) ===");
+        for (int i = 1; i <= 5; i++) {
+            printSlot(scheduledSlots[i], history, days[i - 1], i);
+            if (scheduledSlots[i] != null) {
+                week1Revenue += scheduledSlots[i].revenue;
+            }
+        }
+        System.out.println("Week 1 Revenue: \u20B9" + week1Revenue);
 
-                System.out.println(days[i] + " \u2192 " + p.title +
-                        " (Deadline: " + p.deadline + ", \u20B9" + p.revenue + ") [Score: " + String.format("%.2f", sv)
-                        + "]" + tag);
-                totalRevenue += p.revenue;
-            } else {
-                System.out.println(days[i] + " \u2192 No Project (Optimal Slot Saved)");
+        for (int i = 6; i <= 10; i++) {
+            if (scheduledSlots[i] != null) {
+                week2ProjectsCount++;
             }
         }
 
-        System.out.println("\n\uD83D\uDCB0 Total Actual Revenue: \u20B9" + totalRevenue);
-        System.out.println("\uD83D\uDCC8 Optimized using Chronological Priority Selection.");
+        System.out.println("\n === ANALYSIS & PREDICTION ===");
+
+        double pastTotalRev = history.stream().mapToDouble(p -> p.revenue).sum();
+        double pastWeeksCount = Math.max(1, Math.ceil(history.size() / 5.0));
+        double pastWeekAvgRevenue = history.isEmpty() ? 0 : pastTotalRev / pastWeeksCount;
+
+        if (history.isEmpty()) {
+            System.out.println("   [Comparison] No historical projects available to compare.");
+        } else {
+            if (week1Revenue > pastWeekAvgRevenue) {
+                System.out.println("   [Comparison] This week (\u20B9" + week1Revenue
+                        + ") is BETTER than the historical weekly average (\u20B9"
+                        + String.format("%.2f", pastWeekAvgRevenue) + ").");
+            } else if (week1Revenue < pastWeekAvgRevenue) {
+                System.out.println("   [Comparison] This week (\u20B9" + week1Revenue
+                        + ") is WORSE than the historical weekly average (\u20B9"
+                        + String.format("%.2f", pastWeekAvgRevenue) + ").");
+            } else {
+                System.out.println("   [Comparison] This week's revenue equals the historical weekly average (\u20B9"
+                        + String.format("%.2f", pastWeekAvgRevenue) + ").");
+            }
+        }
+
+        if (week2ProjectsCount > 0) {
+            System.out.println(
+                    "\n   [Next Week Prediction] We have deferred " + week2ProjectsCount + " project(s) to next week.");
+        } else {
+            System.out.println("\n   [Next Week Prediction] All slots for next week are currently open.");
+            System.out.println(
+                    "   -> We have full capacity to take on new, high-value urgent projects next week without risk to upcoming revenue.");
+        }
+    }
+
+    private static void printSlot(Project p, List<Project> history, String dayName, int currentDay) {
+        if (p != null) {
+            double sv = PredictiveService.calculateStrategicValue(p, history);
+            String tag;
+            if (p.deadline == currentDay) {
+                tag = " [Expires Today!]";
+            } else if (p.deadline > 5) {
+                tag = " [Deferred/Flexible]";
+            } else {
+                tag = " [Urgent]";
+            }
+            System.out.println(dayName + " \u2192 " + p.title +
+                    " (Deadline: " + p.deadline + " Days, \u20B9" + p.revenue + ") [Score: " + String.format("%.2f", sv)
+                    + "]" + tag);
+        } else {
+            System.out.println(dayName + " \u2192 No Project (Free Slot)");
+        }
     }
 }

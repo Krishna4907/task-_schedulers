@@ -89,4 +89,31 @@ public class ProjectDAO {
             st.execute(sql);
         }
     }
+
+    public void deleteProject(int id) {
+        String sql = "DELETE FROM projects WHERE project_id = ?";
+        try (Connection con = DBConnection.getConnection();
+             PreparedStatement ps = con.prepareStatement(sql)) {
+            ps.setInt(1, id);
+            int affectedRows = ps.executeUpdate();
+            if (affectedRows > 0) {
+                System.out.println(" Project deleted successfully!");
+            } else {
+                System.out.println(" Project ID not found!");
+            }
+        } catch (Exception e) {
+            e.printStackTrace();
+        }
+    }
+
+    public void resetAllProjects() {
+        String sql = "DELETE FROM projects";
+        try (Connection con = DBConnection.getConnection();
+             PreparedStatement ps = con.prepareStatement(sql)) {
+            ps.executeUpdate();
+            System.out.println(" All active projects have been reset and removed!");
+        } catch (Exception e) {
+            e.printStackTrace();
+        }
+    }
 }

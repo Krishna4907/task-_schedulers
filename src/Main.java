@@ -14,7 +14,9 @@ public class Main {
             System.out.println("2. View Projects");
             System.out.println("3. Generate Weekly Schedule");
             System.out.println("4. Mark Project as Completed");
-            System.out.println("5. Exit");
+            System.out.println("5. Delete a Project");
+            System.out.println("6. Reset (Delete All Projects)");
+            System.out.println("7. Exit");
             System.out.print("Choose option: ");
 
             int choice = sc.nextInt();
@@ -62,6 +64,29 @@ public class Main {
                     break;
 
                 case 5:
+                    System.out.println("\n📋 PROJECT LIST FOR DELETION");
+                    for (Project p : dao.getAllProjects()) {
+                        System.out.println(
+                                p.id + " | " + p.title + " (Deadline: " + p.deadline + ", Revenue: " + p.revenue + ")");
+                    }
+                    System.out.println("--------------------------------");
+                    System.out.print("Enter Project ID to delete: ");
+                    int delId = sc.nextInt();
+                    dao.deleteProject(delId);
+                    break;
+
+                case 6:
+                    System.out
+                            .print("[WARNING] Are you sure you want to delete ALL active projects? (Type 'yes' to confirm): ");
+                    String confirm = sc.nextLine();
+                    if (confirm.equalsIgnoreCase("yes") || confirm.equalsIgnoreCase("y")) {
+                        dao.resetAllProjects();
+                    } else {
+                        System.out.println("Reset cancelled.");
+                    }
+                    break;
+
+                case 7:
                     System.out.println("Exiting system...");
                     System.exit(0);
 
