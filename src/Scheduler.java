@@ -100,17 +100,9 @@ public class Scheduler {
     private static void printSlot(Project p, List<Project> history, String dayName, int currentDay) {
         if (p != null) {
             double sv = PredictiveService.calculateStrategicValue(p, history);
-            String tag;
-            if (p.deadline == currentDay) {
-                tag = " [Expires Today!]";
-            } else if (p.deadline > 5) {
-                tag = " [Deferred/Flexible]";
-            } else {
-                tag = " [Urgent]";
-            }
             System.out.println(dayName + " \u2192 " + p.title +
                     " (Deadline: " + p.deadline + " Days, \u20B9" + p.revenue + ") [Score: " + String.format("%.2f", sv)
-                    + "]" + tag);
+                    + "]");
         } else {
             System.out.println(dayName + " \u2192 No Project (Free Slot)");
         }
